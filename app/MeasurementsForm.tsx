@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { AddMeasurementsRequest } from "./types";
@@ -17,7 +17,7 @@ type State =
   | { status: "success"; score: number };
 
 export function MeasurementsForm() {
-  const [state, setState] = React.useState<State>({ status: "idle" });
+  const [state, setState] = useState<State>({ status: "idle" });
 
   const { handleSubmit, register, formState, reset } =
     useForm<MeasurementFormData>({
@@ -26,6 +26,11 @@ export function MeasurementsForm() {
     });
 
   const onSubmit = (formData: MeasurementFormData) => {
+    if (state.status === "loading") {
+      // request in-flight, ignore submissions
+      return;
+    }
+
     const request: AddMeasurementsRequest = {
       measurements: [
         { type: "TEMP", value: formData.temperature },
@@ -34,10 +39,11 @@ export function MeasurementsForm() {
       ],
     };
 
+    setState({ status: "loading" });
     api
       .addMeasurements(request)
       .then((response) =>
-        setState({ status: "success", score: response.score })
+        setState({ status: "success", score: response.score }),
       )
       .catch((err) => {
         // log to Sentry or similar
@@ -52,12 +58,13 @@ export function MeasurementsForm() {
 
   return (
     <form
-      className="w-[404px] flex flex-col gap-10"
+      className="flex w-[404px] flex-col gap-10"
       onSubmit={handleSubmit(onSubmit)}
+      noValidate
     >
-      <h1 className="font-semibold text-xl">NEWS score calculator</h1>
+      <h1 className="text-xl font-semibold">NEWS score calculator</h1>
       {state.status === "error" ? (
-        <div className="p-4 text-red-600 bg-red-50 rounded-md border-red-100 border text-sm">
+        <div className="rounded-md border border-red-100 bg-red-50 p-4 text-sm text-red-600">
           Oops! An unexpected error occurred.
         </div>
       ) : null}
@@ -86,12 +93,14 @@ export function MeasurementsForm() {
         />
       </FormControl>
       <div className="flex items-center gap-6">
-        <button className="rounded-full px-4 py-2 bg-[#7424DA] text-white hover:opacity-90">
-          Calculate NEWS score
+        <button className="flex min-w-52 items-center justify-center rounded-full bg-[#7424DA] px-4 py-2 text-white hover:opacity-90">
+          {state.status === "loading"
+            ? "Calculating..."
+            : "Calculate NEWS score"}
         </button>
         <button
           type="button"
-          className="rounded-full px-4 py-2 bg-[#FAF6FF] hover:opacity-90"
+          className="flex items-center rounded-full bg-[#FAF6FF] px-4 py-2 hover:opacity-90"
           onClick={handleResetClick}
         >
           Reset form
@@ -103,9 +112,9 @@ export function MeasurementsForm() {
 }
 
 const validationSchema = z.object({
-  temperature: z.coerce.number().min(32).max(42),
-  heartrate: z.coerce.number().min(26).max(220),
-  respiratoryRate: z.coerce.number().min(4).max(60),
+  temperature: z.coerce.number().int().min(32).max(42),
+  heartrate: z.coerce.number().int().min(26).max(220),
+  respiratoryRate: z.coerce.number().int().min(4).max(60),
 });
 
 type MeasurementFormData = z.infer<typeof validationSchema>;
